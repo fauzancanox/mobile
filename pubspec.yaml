@@ -1,0 +1,30 @@
+name: med_manager_app
+description: Aplikasi manajemen obat sederhana untuk mengatur jadwal dan konsumsi obat.
+publish_to: 'none' # Jangan publikasikan ke pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+
+
+  # Untuk menambahkan aset gambar ke aplikasi Anda
+  # 1. Buat folder bernama 'assets' di dalam direktori proyek Anda (sejajar dengan folder lib)
+  # 2. Di dalam folder 'assets', buat lagi folder bernama 'images'
+  # 3. Letakkan file gambar Anda (misalnya vitamins.png, antibiotics.png) di dalam folder 'assets/images'
+  # 4. Pastikan nama file gambar sesuai dengan yang digunakan di kode (medication_categories)
+flutter:
+  uses-material-design: true 
+  assets:
+    - assets/images/
