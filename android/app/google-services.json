@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "504862035186",
+    "project_id": "manajemen-obat-3ae97",
+    "storage_bucket": "manajemen-obat-3ae97.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:504862035186:android:5b14ad308a97e4081a546b",
+        "android_client_info": {
+          "package_name": "com.example.najwa_praktikum"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDN8kYfUv-7Dl5TAcZsGMCXaAiR5OqKAJg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

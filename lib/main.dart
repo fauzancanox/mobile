@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
 
 // --- a. API SERVICE (SIMULASI) ---
 // Kelas ini untuk mensimulasikan panggilan API
@@ -113,8 +117,51 @@ class ApiService {
   }
 }
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const ECommerceApp());
+}
+
+class AuthService {
+  static final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  static Future<String?> login(String email, String password) async {
+    try {
+      await _auth.signInWithEmailAndPassword(email: email, password: password)
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw Exception('Koneksi timeout, coba lagi.'),
+          );
+      return null;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') return 'Email tidak ditemukan.';
+      if (e.code == 'wrong-password') return 'Password salah.';
+      if (e.code == 'invalid-credential') return 'Email atau password salah.';
+      return 'Login gagal: ${e.message}';
+    } catch (e) {
+      return 'Terjadi kesalahan: $e';
+    }
+  }
+
+  static Future<String?> register(String email, String password) async {
+    try {
+      await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'weak-password') return 'Password terlalu lemah.';
+      if (e.code == 'email-already-in-use') return 'Email sudah digunakan.';
+      return 'Register gagal: ${e.message}';
+    }
+  }
+
+  static Future<void> logout() async {
+    await _auth.signOut();
+  }
+
+  static User? get currentUser => _auth.currentUser;
 }
 
 class ECommerceApp extends StatelessWidget {
@@ -177,7 +224,10 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.medication, size: 100, color: Colors.blue[700]),
+              CircleAvatar(
+                radius: 50,
+                backgroundImage: AssetImage('assets/images/Logo.jpeg'),
+              ),
             const SizedBox(height: 20),
             Text(
               'Manajemen Obat',
@@ -205,8 +255,51 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Diubah menjadi true untuk menampilkan admin login secara default
-  bool _isAdmin = true;
+  bool _isLoading = false;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  bool _obscurePassword = true;
+  static const String _adminEmail = 'admin@manajemenobat.com';
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email dan password harus diisi.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final error = await AuthService.login(email, password);
+
+    setState(() => _isLoading = false);
+
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    final isAdmin = email == _adminEmail;
+    if (isAdmin) {
+      Navigator.pushReplacementNamed(context, '/admin');
+    } else {
+      Navigator.pushReplacementNamed(context, '/beranda');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -218,22 +311,13 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Diubah untuk menampilkan ikon dengan background biru dan cross putih
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue[700],
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.add,
-                  color: Colors.white,
-                  size: 50,
-                ),
+              CircleAvatar(
+                radius: 50,
+                backgroundImage: AssetImage('assets/images/Logo.jpeg'),
               ),
               const SizedBox(height: 20),
               Text(
-                'Manajemen Obat',
+                'HALAMAN',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -251,14 +335,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     children: [
                       const Text(
-                        'Login',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        'LOGIN',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 20),
                       TextFormField(
+                        controller: _emailController,
                         decoration: const InputDecoration(
                           labelText: 'Email',
                           prefixIcon: Icon(Icons.email),
@@ -266,52 +348,41 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 15),
-                      TextFormField(
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: Icon(Icons.lock),
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      // b. Checkbox untuk login admin
-                      CheckboxListTile(
-                        title: const Text("Login sebagai Admin"),
-                        value: _isAdmin,
-                        onChanged: (bool? value) {
-                          setState(() {
-                            _isAdmin = value!;
-                          });
-                        },
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            // b. Navigasi berdasarkan role
-                            if (_isAdmin) {
-                              Navigator.pushReplacementNamed(context, '/admin');
-                            } else {
-                              Navigator.pushReplacementNamed(
-                                  context, '/beranda');
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue[700],
-                            padding: const EdgeInsets.symmetric(vertical: 15),
-                          ),
-                          child: const Text(
-                            'Login',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
                             ),
                           ),
                         ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : ElevatedButton(
+                              onPressed: _handleLogin,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue[700],
+                                padding: const EdgeInsets.symmetric(vertical: 15),
+                              ),
+                              child: const Text(
+                                'Login',
+                                style: TextStyle(color: Colors.white, fontSize: 16),
+                              ),
+                            ),
                       ),
                       const SizedBox(height: 15),
                       Align(
@@ -457,23 +528,100 @@ class ForgotPasswordScreen extends StatelessWidget {
 }
 
 // --- Halaman Register ---
-class RegisterScreen extends StatelessWidget {
+class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  bool _isLoading = false;
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleRegister() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
+
+    if (_nameController.text.isEmpty || email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Semua field harus diisi.')),
+      );
+      return;
+    }
+
+    if (password != confirmPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password dan konfirmasi password tidak sama.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final error = await AuthService.register(email, password);
+
+    setState(() => _isLoading = false);
+
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Registrasi berhasil!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+    Navigator.pushReplacementNamed(context, '/beranda');
+  }
+
+      @override
+      Widget build(BuildContext context) {
+        return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.blue),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.medication, size: 100, color: Colors.blue[700]),
+              CircleAvatar(
+                radius: 50,
+                backgroundImage: AssetImage('assets/images/Logo.jpeg'),
+              ), //harus ganti
               const SizedBox(height: 20),
               Text(
-                'Manajemen Obat',
+                'HALAMAN',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -491,14 +639,12 @@ class RegisterScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       const Text(
-                        'Register',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        'REGISTRASI',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 20),
                       TextFormField(
+                        controller: _nameController,
                         decoration: const InputDecoration(
                           labelText: 'Nama Lengkap',
                           prefixIcon: Icon(Icons.person),
@@ -507,6 +653,7 @@ class RegisterScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 15),
                       TextFormField(
+                        controller: _emailController,
                         decoration: const InputDecoration(
                           labelText: 'Email',
                           prefixIcon: Icon(Icons.email),
@@ -515,6 +662,7 @@ class RegisterScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 15),
                       TextFormField(
+                        controller: _passwordController,
                         obscureText: true,
                         decoration: const InputDecoration(
                           labelText: 'Password',
@@ -524,6 +672,7 @@ class RegisterScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 15),
                       TextFormField(
+                        controller: _confirmPasswordController,
                         obscureText: true,
                         decoration: const InputDecoration(
                           labelText: 'Konfirmasi Password',
@@ -534,22 +683,19 @@ class RegisterScreen extends StatelessWidget {
                       const SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pushReplacementNamed(context, '/beranda');
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue[700],
-                            padding: const EdgeInsets.symmetric(vertical: 15),
-                          ),
-                          child: const Text(
-                            'Register',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
+                        child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : ElevatedButton(
+                              onPressed: _handleRegister,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue[700],
+                                padding: const EdgeInsets.symmetric(vertical: 15),
+                              ),
+                              child: const Text(
+                                'Register',
+                                style: TextStyle(color: Colors.white, fontSize: 16),
+                              ),
                             ),
-                          ),
-                        ),
                       ),
                       const SizedBox(height: 15),
                       Row(
@@ -710,24 +856,12 @@ class BerandaScreen extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               ListTile(
-                                leading: const Icon(Icons.settings),
-                                title: const Text('Pengaturan'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Menuju ke Pengaturan')),
-                                  );
-                                },
-                              ),
-                              ListTile(
-                                leading: const Icon(Icons.help),
-                                title: const Text('Bantuan'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Menuju ke Bantuan')),
+                                leading: const Icon(Icons.logout, color: Colors.red),
+                                title: const Text("Keluar", style: TextStyle(color: Colors.red)),
+                                onTap: () async {
+                                  await AuthService.logout();
+                                  Navigator.pushNamedAndRemoveUntil(
+                                    context, '/login', (Route<dynamic> route) => false,
                                   );
                                 },
                               ),
@@ -877,11 +1011,41 @@ class AdminScreen extends StatelessWidget {
         title: const Text("Dashboard Admin"),
         backgroundColor: Colors.red[700],
         foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () async {
+            await AuthService.logout();
+            Navigator.pushNamedAndRemoveUntil(
+              context, '/login', (route) => false,
+            );
+          },
+        ),
       ),
-      body: const Center(
-        child: Text(
-          "Selamat Datang, Admin!",
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              "Selamat Datang, Admin!",
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              onPressed: () async {
+                await AuthService.logout();
+                Navigator.pushNamedAndRemoveUntil(
+                  context, '/login', (route) => false,
+                );
+              },
+              icon: const Icon(Icons.logout),
+              label: const Text("Logout"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+              ),
+            ),
+          ],
         ),
       ),
     );
